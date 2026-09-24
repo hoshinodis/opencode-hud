@@ -230,10 +230,6 @@ const plugin = {
     } catch (error) {
       debug("setup: bun:sqlite unavailable: " + String(error))
     }
-    const theme = api.theme as unknown as Record<string, unknown> | undefined
-    const themeKeys = Object.keys(theme ?? {})
-    const textKeys = Object.keys((theme?.text as Record<string, unknown>) ?? {})
-    debug(`setup: theme keys=${themeKeys.join(",")} text=${textKeys.join(",")}`)
     anyApi.ui.slot({
       append: "sidebar.content",
       render: (props: { sessionID?: string }) => <View api={api} sessionID={props?.sessionID} usage={query} />,
