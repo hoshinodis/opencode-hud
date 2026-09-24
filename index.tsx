@@ -8,10 +8,12 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 const PRUNER_LOG = join(homedir(), ".config/opencode/context-pruner/decisions.jsonl")
 const GATE_LOG = join(homedir(), ".config/opencode/intent-gate/decisions.jsonl")
 const DEBUG_LOG = join(homedir(), ".config/opencode/hud-debug.log")
+const DB_PATH = join(homedir(), ".local/share/opencode/opencode.db")
 const TAIL_BYTES = 128 * 1024
 const POLL_MS = 2000
 
 type Entry = Record<string, unknown>
+type Usage = { cost?: number; input?: number; cacheRead?: number; cacheWrite?: number }
 
 const debug = (message: string) => {
   try {
@@ -54,7 +56,15 @@ const ago = (ts: unknown): string => {
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`
 }
 
-const load = (sessionID?: string) => {
+const fmt = (value?: number): string => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-"
+  if (value >= 1e9) return `${(value / 1e9).toFixed(1)}B`
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
+  if (value >= 1e3) return `${Math.round(value / 1e3)}k`
+  return String(Math.round(value))
+}
+
+const load = (sessionID: string | undefined, usage: (id: string) => Usage | undefined) => {
   const pruner = tail(PRUNER_LOG)
   const mine = sessionID ? pruner.filter((row) => str(row.sessionID) === sessionID) : pruner
   return {
@@ -62,16 +72,17 @@ const load = (sessionID?: string) => {
     apply: last(mine, (row) => row.event === "apply"),
     skip: last(mine, (row) => row.event === "skip"),
     decision: last(tail(GATE_LOG), (row) => ["pass", "gate", "skip", "skipped"].includes(str(row.event))),
+    usage: sessionID ? usage(sessionID) : undefined,
   }
 }
 
-function View(props: { api: TuiPluginApi; sessionID?: string }) {
+function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string) => Usage | undefined }) {
   const [tick, setTick] = createSignal(0)
   const timer = setInterval(() => setTick((value) => value + 1), POLL_MS)
   onCleanup(() => clearInterval(timer))
   const snap = createMemo(() => {
     tick()
-    return load(props.sessionID)
+    return load(props.sessionID, props.usage)
   })
   const token = (group: string, sub: string): unknown => {
     const value = (props.api.theme as unknown as Record<string, unknown>)?.[group]
@@ -116,6 +127,15 @@ function View(props: { api: TuiPluginApi; sessionID?: string }) {
     const work = scores ? `work ${scores.is_work_request?.toFixed(2)}` : ""
     return `${str(entry.event)} ${work} (${ago(entry.ts)})`
   }
+  const cache = () => {
+    const usage = snap().usage
+    if (!usage) return "no data"
+    const input = usage.input ?? 0
+    const read = usage.cacheRead ?? 0
+    if (input + read === 0) return "no data"
+    const pct = Math.round((read / (input + read)) * 100)
+    return `${pct}% hit · read ${fmt(read)} / in ${fmt(input)}`
+  }
   return (
     <box flexDirection="column">
       {heading("Pruner")}
@@ -123,6 +143,9 @@ function View(props: { api: TuiPluginApi; sessionID?: string }) {
       <box height={1} flexShrink={0} />
       {heading("Gate")}
       {bullet(gate())}
+      <box height={1} flexShrink={0} />
+      {heading("Cache")}
+      {bullet(cache())}
     </box>
   )
 }
@@ -131,10 +154,28 @@ const plugin = {
   id: "hud",
   setup: async (api: TuiPluginApi) => {
     const anyApi = api as unknown as { ui: { slot: (input: unknown) => unknown } }
-    debug("setup: v2 (session-filtered, themed)")
+    let query: (id: string) => Usage | undefined = () => undefined
+    try {
+      const { Database } = (await import("bun:sqlite")) as typeof import("bun:sqlite")
+      const db = new Database(DB_PATH, { readonly: true })
+      query = (id: string) => {
+        try {
+          return (db
+            .query(
+              "SELECT tokens_input AS input, tokens_cache_read AS cacheRead, tokens_cache_write AS cacheWrite, cost FROM session_v2 WHERE id = ?",
+            )
+            .get(id) ?? undefined) as Usage | undefined
+        } catch {
+          return undefined
+        }
+      }
+      debug("setup: bun:sqlite ok")
+    } catch (error) {
+      debug("setup: bun:sqlite unavailable: " + String(error))
+    }
     anyApi.ui.slot({
       append: "sidebar.content",
-      render: (props: { sessionID?: string }) => <View api={api} sessionID={props?.sessionID} />,
+      render: (props: { sessionID?: string }) => <View api={api} sessionID={props?.sessionID} usage={query} />,
     })
   },
 }
