@@ -3,7 +3,7 @@ import { appendFileSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { createMemo, createSignal, onCleanup, Show } from "solid-js"
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 
 const PRUNER_LOG = join(homedir(), ".config/opencode/context-pruner/decisions.jsonl")
 const GATE_LOG = join(homedir(), ".config/opencode/intent-gate/decisions.jsonl")
@@ -121,20 +121,21 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   )
 }
 
-const tui: TuiPlugin = async (api) => {
-  debug("tui() called")
-  debug("plugins: " + JSON.stringify(api.plugins.list().map((p) => ({ id: p.id, active: p.active }))))
-  api.slots.register({
-    order: 500,
-    slots: {
-      sidebar_content(_ctx, value) {
-        debug("sidebar slot rendered session=" + value.session_id)
-        return <View api={api} sessionID={value.session_id} />
+const plugin = {
+  id: "hud",
+  setup: async (api: TuiPluginApi) => {
+    debug("setup() called")
+    debug("plugins: " + JSON.stringify(api.plugins.list().map((p) => ({ id: p.id, active: p.active }))))
+    api.slots.register({
+      order: 500,
+      slots: {
+        sidebar_content(_ctx, value) {
+          debug("sidebar slot rendered session=" + value.session_id)
+          return <View api={api} sessionID={value.session_id} />
+        },
       },
-    },
-  })
+    })
+  },
 }
-
-const plugin: TuiPluginModule & { id: string } = { id: "hud", tui }
 
 export default plugin
