@@ -7,10 +7,17 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 
 const PRUNER_LOG = join(homedir(), ".config/opencode/context-pruner/decisions.jsonl")
 const GATE_LOG = join(homedir(), ".config/opencode/intent-gate/decisions.jsonl")
+const DEBUG_LOG = join(homedir(), ".config/opencode/hud-debug.log")
 const TAIL_BYTES = 128 * 1024
 const POLL_MS = 2000
 
 type Entry = Record<string, unknown>
+
+const debug = (message: string) => {
+  try {
+    appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${message}\n`)
+  } catch {}
+}
 
 const tail = (path: string): Entry[] => {
   try {
@@ -37,13 +44,6 @@ const last = (rows: Entry[], match: (row: Entry) => boolean): Entry | undefined 
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "")
 
-const DEBUG_LOG = join(homedir(), ".config/opencode/hud-debug.log")
-const debug = (message: string) => {
-  try {
-    appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${message}\n`)
-  } catch {}
-}
-
 const ago = (ts: unknown): string => {
   const at = Date.parse(str(ts))
   if (!Number.isFinite(at)) return "-"
@@ -54,32 +54,38 @@ const ago = (ts: unknown): string => {
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`
 }
 
-const load = (sessionID: string) => {
+const load = () => {
   const pruner = tail(PRUNER_LOG)
-  const mine = pruner.filter((row) => str(row.sessionID) === sessionID)
   return {
     setup: last(pruner, (row) => row.event === "setup"),
-    apply: last(mine, (row) => row.event === "apply"),
-    skip: last(mine, (row) => row.event === "skip"),
+    apply: last(pruner, (row) => row.event === "apply"),
+    skip: last(pruner, (row) => row.event === "skip"),
     decision: last(tail(GATE_LOG), (row) => ["pass", "gate", "skip", "skipped"].includes(str(row.event))),
   }
 }
 
-function View(props: { api: TuiPluginApi; sessionID: string }) {
+function View(props: { api: TuiPluginApi }) {
   const [tick, setTick] = createSignal(0)
   const timer = setInterval(() => setTick((value) => value + 1), POLL_MS)
   onCleanup(() => clearInterval(timer))
   const snap = createMemo(() => {
     tick()
-    return load(props.sessionID)
+    return load()
   })
-  const theme = () => props.api.theme.current
+  const ink = (name: string, fallback?: string): string | undefined => {
+    const token = (props.api.theme as unknown as Record<string, unknown>)?.[name]
+    if (typeof token === "string") return token
+    if (token && typeof token === "object") {
+      const group = token as Record<string, unknown>
+      const value = group.default ?? group.text ?? group.muted
+      if (typeof value === "string") return value
+    }
+    return fallback
+  }
   const line = (label: string, value: string) => (
     <box flexDirection="row" gap={1}>
-      <text flexShrink={0} fg={theme().textMuted}>
-        {label}
-      </text>
-      <text fg={theme().text}>{value}</text>
+      <text fg={ink("text", "#a5a5a5")}>{label}</text>
+      <text fg={ink("text", "#f0f0f0")}>{value}</text>
     </box>
   )
   const pruner = () => {
@@ -102,38 +108,38 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     const work = scores ? `work ${scores.is_work_request?.toFixed(2)}` : ""
     return `${str(row.event)} ${work} (${ago(row.ts)})`
   }
-  const health = () => {
-    const setup = snap().setup
-    if (!setup) return "no setup log"
-    return setup.enabled === false ? "disabled" : "ok"
-  }
   return (
     <box flexDirection="column">
-      <text fg={theme().text}>
+      <text fg={ink("text", "#f0f0f0")}>
         <b>HUD</b>
       </text>
-      <Show when={snap().setup || snap().apply || snap().skip || snap().decision} fallback={line("logs", "none yet")}>
-        {line("pruner", pruner())}
-        {line("gate", gate())}
-        {line("health", health())}
+      {line("pruner", pruner())}
+      {line("gate", gate())}
+      <Show when={false}>
+        <text>unused</text>
       </Show>
     </box>
   )
 }
 
+let logged = false
+
 const plugin = {
   id: "hud",
   setup: async (api: TuiPluginApi) => {
-    const describe = (value: unknown) =>
-      Object.entries((value ?? {}) as Record<string, unknown>)
-        .map(([key, item]) => `${key}:${typeof item}`)
-        .join(",")
-    debug("api: " + describe(api))
-    debug("ui: " + describe((api as { ui?: unknown }).ui))
-    debug("app: " + describe((api as { app?: unknown }).app))
-    debug("data: " + describe((api as { data?: unknown }).data))
-    debug("keymap: " + describe((api as { keymap?: unknown }).keymap))
-    debug("theme: " + describe((api as { theme?: unknown }).theme))
+    const anyApi = api as unknown as { ui: { slot: (input: unknown) => unknown } }
+    debug("setup: api keys=" + Object.keys(api).join(","))
+    anyApi.ui.slot({
+      append: "sidebar.content",
+      render: (props: unknown) => {
+        if (!logged) {
+          logged = true
+          debug("render props keys=" + Object.keys((props ?? {}) as object).join(","))
+        }
+        return <View api={api} />
+      },
+    })
+    debug("slot registered (append sidebar.content)")
   },
 }
 
