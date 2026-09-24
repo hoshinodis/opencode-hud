@@ -124,16 +124,16 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
 const plugin = {
   id: "hud",
   setup: async (api: TuiPluginApi) => {
-    debug("setup() called: api keys=" + Object.keys(api).join(","))
-    api.slots.register({
-      order: 500,
-      slots: {
-        sidebar_content(_ctx, value) {
-          debug("sidebar slot rendered session=" + value.session_id)
-          return <View api={api} sessionID={value.session_id} />
-        },
-      },
-    })
+    const describe = (value: unknown) =>
+      Object.entries((value ?? {}) as Record<string, unknown>)
+        .map(([key, item]) => `${key}:${typeof item}`)
+        .join(",")
+    debug("api: " + describe(api))
+    debug("ui: " + describe((api as { ui?: unknown }).ui))
+    debug("app: " + describe((api as { app?: unknown }).app))
+    debug("data: " + describe((api as { data?: unknown }).data))
+    debug("keymap: " + describe((api as { keymap?: unknown }).keymap))
+    debug("theme: " + describe((api as { theme?: unknown }).theme))
   },
 }
 
