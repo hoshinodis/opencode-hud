@@ -81,15 +81,20 @@ function View(props: { api: TuiPluginApi; sessionID?: string }) {
   }
   const muted = () => token("text", "muted")
   const ink = () => token("text", "base") ?? token("text", "default")
-  const row = (name: string, value: string) => (
+  const bullet = (value: string) => (
     <box flexDirection="row" gap={1}>
       <text flexShrink={0} fg={muted() as never}>
         •
       </text>
       <text fg={ink() as never} wrapMode="word">
-        {name} <span style={{ fg: muted() as never }}>{value}</span>
+        {value}
       </text>
     </box>
+  )
+  const heading = (label: string) => (
+    <text fg={ink() as never}>
+      <b>{label}</b>
+    </text>
   )
   const pruner = () => {
     const setup = snap().setup
@@ -113,11 +118,10 @@ function View(props: { api: TuiPluginApi; sessionID?: string }) {
   }
   return (
     <box flexDirection="column">
-      <text fg={ink() as never}>
-        <b>HUD</b>
-      </text>
-      {row("pruner", pruner())}
-      {row("gate", gate())}
+      {heading("Pruner")}
+      {bullet(pruner())}
+      {heading("Gate")}
+      {bullet(gate())}
     </box>
   )
 }
