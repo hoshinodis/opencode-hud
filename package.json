@@ -1,0 +1,14 @@
+{
+  "name": "opencode-hud",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tui": "./index.tsx"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.31",
+    "@opentui/solid": "0.5.12",
+    "solid-js": "1.9.12"
+  }
+}
