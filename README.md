@@ -8,7 +8,7 @@ Personal TUI HUD for [OpenCode](https://opencode.ai) V2: shows the state of the
 
 ```
 Pruner
-• per-request · -123/-0 (51m)
+• per-request · -123/-0 · idle 51m
 
 Gate
 • pass work 0.23 (2m)
@@ -20,6 +20,7 @@ Cache
 ```
 
 - **Pruner / Gate** read the plugins' `decisions.jsonl` (session-scoped)
+- The Pruner line's `idle` is the time since the session's last message activity (`session_message.time_updated` max)
 - **Cache** computes the prompt-cache hit rate from `session_v2` usage (`bun:sqlite`, read-only)
 - An error line is shown only while it is the newest event in its log
 

@@ -13,7 +13,15 @@ const TAIL_BYTES = 128 * 1024
 const POLL_MS = 2000
 
 type Entry = Record<string, unknown>
-type Usage = { cost?: number; input?: number; output?: number; reasoning?: number; cacheRead?: number; cacheWrite?: number }
+type Usage = {
+  cost?: number
+  input?: number
+  output?: number
+  reasoning?: number
+  cacheRead?: number
+  cacheWrite?: number
+  lastActivityAt?: number
+}
 
 const debug = (message: string) => {
   try {
@@ -46,14 +54,23 @@ const last = (rows: Entry[], match: (row: Entry) => boolean): Entry | undefined 
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "")
 
-const ago = (ts: unknown): string => {
-  const at = Date.parse(str(ts))
-  if (!Number.isFinite(at)) return "-"
-  const min = Math.floor((Date.now() - at) / 60000)
+const span = (min: number): string => {
   if (min < 1) return "now"
   if (min < 60) return `${min}m`
   const hours = Math.floor(min / 60)
   return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+}
+
+const ago = (ts: unknown): string => {
+  const at = Date.parse(str(ts))
+  if (!Number.isFinite(at)) return "-"
+  return span(Math.floor((Date.now() - at) / 60000))
+}
+
+/** セッションの最終活動（メッセージ更新）からの経過。 */
+const idleText = (at: unknown): string => {
+  if (typeof at !== "number" || !Number.isFinite(at)) return ""
+  return `idle ${span(Math.floor((Date.now() - at) / 60000))}`
 }
 
 const fmt = (value?: number): string => {
@@ -118,13 +135,15 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     const apply = snap().apply
     const skip = snap().skip
     const mode = str(setup?.mode) || "?"
+    const idle = idleText(snap().usage?.lastActivityAt)
+    const tail = idle ? ` · ${idle}` : ""
     if (apply) {
       const changed = Number(apply.changedMessages ?? 0)
       const removed = Number(apply.removedMessages ?? 0)
-      return `${mode} · -${changed}/-${removed} (${ago(apply.ts)})`
+      return `${mode} · -${changed}/-${removed}${tail}`
     }
-    if (skip) return `${mode} · skip ${str(skip.reason)} (${ago(skip.ts)})`
-    return `${mode} · no activity`
+    if (skip) return `${mode} · skip ${str(skip.reason)}${tail}`
+    return `${mode} · no activity${tail}`
   }
   const gate = () => {
     const entry = snap().decision
@@ -196,7 +215,7 @@ const plugin = {
         try {
           return (db
             .query(
-              "SELECT tokens_input AS input, tokens_output AS output, tokens_reasoning AS reasoning, tokens_cache_read AS cacheRead, tokens_cache_write AS cacheWrite, cost FROM session_v2 WHERE id = ?",
+              "SELECT tokens_input AS input, tokens_output AS output, tokens_reasoning AS reasoning, tokens_cache_read AS cacheRead, tokens_cache_write AS cacheWrite, cost, (SELECT MAX(time_updated) FROM session_message WHERE session_id = session_v2.id) AS lastActivityAt FROM session_v2 WHERE id = ?",
             )
             .get(id) ?? undefined) as Usage | undefined
         } catch {
