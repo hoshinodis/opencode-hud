@@ -120,6 +120,7 @@ function View(props: { api: TuiPluginApi; sessionID?: string }) {
     <box flexDirection="column">
       {heading("Pruner")}
       {bullet(pruner())}
+      <box height={1} flexShrink={0} />
       {heading("Gate")}
       {bullet(gate())}
     </box>
