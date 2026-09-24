@@ -107,20 +107,16 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     tick()
     return load(props.sessionID, props.usage)
   })
-  const token = (group: string, sub: string): unknown => {
-    const value = (props.api.theme as unknown as Record<string, unknown>)?.[group]
-    if (!value || typeof value !== "object") return value
-    const record = value as Record<string, unknown>
-    return record[sub] ?? record.base
-  }
-  const muted = () => token("text", "muted")
-  const ink = () => token("text", "base") ?? token("text", "default")
-  const bullet = (value: string) => (
+  const token = (name: string): unknown =>
+    (props.api.theme as unknown as { current?: Record<string, unknown> })?.current?.[name]
+  const muted = () => token("textMuted")
+  const ink = () => token("text")
+  const bullet = (value: string, emphasis = false) => (
     <box flexDirection="row" gap={1}>
       <text flexShrink={0} fg={muted() as never}>
         •
       </text>
-      <text fg={ink() as never} wrapMode="word">
+      <text fg={(emphasis ? ink() : muted()) as never} wrapMode="word">
         {value}
       </text>
     </box>
@@ -189,12 +185,12 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     <box flexDirection="column">
       {heading("Pruner")}
       {bullet(pruner())}
-      {prunerError() ? bullet(`error: ${prunerError()}`) : null}
+      {prunerError() ? bullet(`error: ${prunerError()}`, true) : null}
       <box height={1} flexShrink={0} />
       {heading("Gate")}
       {bullet(gate())}
       {bullet(gateRate())}
-      {gateError() ? bullet(`error: ${gateError()}`) : null}
+      {gateError() ? bullet(`error: ${gateError()}`, true) : null}
       <box height={1} flexShrink={0} />
       {heading("Cache")}
       {bullet(cache())}
