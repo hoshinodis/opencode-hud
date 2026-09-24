@@ -158,31 +158,29 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     if (!usage) return "no data"
     return `out ${fmt(usage.output)} · reason ${fmt(usage.reasoning)}`
   }
-  const lastError = (entry: Entry | undefined) =>
-    entry ? `${str(entry.error)} (${ago(entry.ts)})` : "none"
-  const healthGate = () => {
+  const errorText = (entry: Entry | undefined) => (entry ? `${str(entry.error)} (${ago(entry.ts)})` : "")
+  const gateHealth = () => {
     const setup = snap().gateSetup
     const key = setup?.keyAvailable === false ? "key ✗" : "key ✓"
     const revision = setup?.revision ? `r${setup.revision}` : ""
-    return `gate ${[key, revision].filter(Boolean).join(" ")} · last error: ${lastError(snap().gateError)}`
+    const error = errorText(snap().gateError)
+    return `${[key, revision].filter(Boolean).join(" ")}${error ? ` · error: ${error}` : ""}`
   }
-  const healthPruner = () => `pruner last error: ${lastError(snap().prunerError)}`
+  const prunerError = () => errorText(snap().prunerError)
   return (
     <box flexDirection="column">
       {heading("Pruner")}
       {bullet(pruner())}
+      {prunerError() ? bullet(`error: ${prunerError()}`) : null}
       <box height={1} flexShrink={0} />
       {heading("Gate")}
       {bullet(gate())}
       {bullet(gateRate())}
+      {bullet(gateHealth())}
       <box height={1} flexShrink={0} />
       {heading("Cache")}
       {bullet(cache())}
       {bullet(tokens())}
-      <box height={1} flexShrink={0} />
-      {heading("Health")}
-      {bullet(healthGate())}
-      {bullet(healthPruner())}
     </box>
   )
 }
