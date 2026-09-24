@@ -107,10 +107,18 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     tick()
     return load(props.sessionID, props.usage)
   })
-  const token = (name: string): unknown =>
-    (props.api.theme as unknown as { current?: Record<string, unknown> })?.current?.[name]
-  const muted = () => token("textMuted")
-  const ink = () => token("text")
+  const themeValue = (path: string[]): unknown => {
+    let value: unknown = props.api.theme
+    for (const key of path) {
+      if (!value || typeof value !== "object") return undefined
+      value = (value as Record<string, unknown>)[key]
+    }
+    return value
+  }
+  const muted = () =>
+    themeValue(["text", "muted"]) ?? themeValue(["current", "textMuted"]) ?? themeValue(["textMuted"])
+  const ink = () =>
+    themeValue(["text", "base"]) ?? themeValue(["current", "text"]) ?? themeValue(["text"])
   const bullet = (value: string, emphasis = false) => (
     <box flexDirection="row" gap={1}>
       <text flexShrink={0} fg={muted() as never}>
@@ -222,6 +230,10 @@ const plugin = {
     } catch (error) {
       debug("setup: bun:sqlite unavailable: " + String(error))
     }
+    const theme = api.theme as unknown as Record<string, unknown> | undefined
+    const themeKeys = Object.keys(theme ?? {})
+    const textKeys = Object.keys((theme?.text as Record<string, unknown>) ?? {})
+    debug(`setup: theme keys=${themeKeys.join(",")} text=${textKeys.join(",")}`)
     anyApi.ui.slot({
       append: "sidebar.content",
       render: (props: { sessionID?: string }) => <View api={api} sessionID={props?.sessionID} usage={query} />,
