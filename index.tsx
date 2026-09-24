@@ -13,7 +13,7 @@ const TAIL_BYTES = 128 * 1024
 const POLL_MS = 2000
 
 type Entry = Record<string, unknown>
-type Usage = { cost?: number; input?: number; cacheRead?: number; cacheWrite?: number }
+type Usage = { cost?: number; input?: number; output?: number; reasoning?: number; cacheRead?: number; cacheWrite?: number }
 
 const debug = (message: string) => {
   try {
@@ -127,6 +127,19 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     const work = scores ? `work ${scores.is_work_request?.toFixed(2)}` : ""
     return `${str(entry.event)} ${work} (${ago(entry.ts)})`
   }
+  const gateRate = () => {
+    const today = new Date().toDateString()
+    const counts = { gate: 0, pass: 0, skip: 0 }
+    for (const row of tail(GATE_LOG)) {
+      const at = new Date(str(row.ts))
+      if (Number.isNaN(at.getTime()) || at.toDateString() !== today) continue
+      const event = str(row.event)
+      if (event === "gate") counts.gate += 1
+      else if (event === "pass") counts.pass += 1
+      else if (event === "skip" || event === "skipped") counts.skip += 1
+    }
+    return `today gate ${counts.gate} · pass ${counts.pass} · skip ${counts.skip}`
+  }
   const cache = () => {
     const usage = snap().usage
     if (!usage) return "no data"
@@ -136,6 +149,11 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     const pct = Math.round((read / (input + read)) * 100)
     return `${pct}% hit · read ${fmt(read)} / in ${fmt(input)}`
   }
+  const tokens = () => {
+    const usage = snap().usage
+    if (!usage) return "no data"
+    return `out ${fmt(usage.output)} · reason ${fmt(usage.reasoning)}`
+  }
   return (
     <box flexDirection="column">
       {heading("Pruner")}
@@ -143,9 +161,11 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
       <box height={1} flexShrink={0} />
       {heading("Gate")}
       {bullet(gate())}
+      {bullet(gateRate())}
       <box height={1} flexShrink={0} />
       {heading("Cache")}
       {bullet(cache())}
+      {bullet(tokens())}
     </box>
   )
 }
@@ -162,7 +182,7 @@ const plugin = {
         try {
           return (db
             .query(
-              "SELECT tokens_input AS input, tokens_cache_read AS cacheRead, tokens_cache_write AS cacheWrite, cost FROM session_v2 WHERE id = ?",
+              "SELECT tokens_input AS input, tokens_output AS output, tokens_reasoning AS reasoning, tokens_cache_read AS cacheRead, tokens_cache_write AS cacheWrite, cost FROM session_v2 WHERE id = ?",
             )
             .get(id) ?? undefined) as Usage | undefined
         } catch {
