@@ -164,13 +164,7 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
     entry ? `${str(entry.error)} (${ago(entry.ts)})` : ""
   const newestError = (error: Entry | undefined, latest: Entry | undefined) =>
     error && latest && str(error.ts) === str(latest.ts) ? errorText(error) : ""
-  const gateHealth = () => {
-    const setup = snap().gateSetup
-    const key = setup?.keyAvailable === false ? "key ✗" : "key ✓"
-    const revision = setup?.revision ? `r${setup.revision}` : ""
-    const error = newestError(snap().gateError, snap().gateLatest)
-    return `${[key, revision].filter(Boolean).join(" ")}${error ? ` · error: ${error}` : ""}`
-  }
+  const gateError = () => newestError(snap().gateError, snap().gateLatest)
   const prunerError = () => newestError(snap().prunerError, snap().prunerLatest)
   return (
     <box flexDirection="column">
@@ -181,7 +175,7 @@ function View(props: { api: TuiPluginApi; sessionID?: string; usage: (id: string
       {heading("Gate")}
       {bullet(gate())}
       {bullet(gateRate())}
-      {bullet(gateHealth())}
+      {gateError() ? bullet(`error: ${gateError()}`) : null}
       <box height={1} flexShrink={0} />
       {heading("Cache")}
       {bullet(cache())}
