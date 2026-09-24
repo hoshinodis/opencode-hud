@@ -124,8 +124,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
 const plugin = {
   id: "hud",
   setup: async (api: TuiPluginApi) => {
-    debug("setup() called")
-    debug("plugins: " + JSON.stringify(api.plugins.list().map((p) => ({ id: p.id, active: p.active }))))
+    debug("setup() called: api keys=" + Object.keys(api).join(","))
     api.slots.register({
       order: 500,
       slots: {
